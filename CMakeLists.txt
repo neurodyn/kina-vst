@@ -10,7 +10,7 @@ add_subdirectory(JUCE)
 
 juce_add_plugin(KINA_VST
     VERSION "1.0.0"
-    COMPANY_NAME "KINA"
+    COMPANY_NAME "neurodyn"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE

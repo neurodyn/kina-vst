@@ -399,7 +399,16 @@ void KinaVSTProcessor::processBlockInternal(juce::dsp::AudioBlock<float>& block,
             
             // Apply VCF modulation
             float vcfModulation = getLfoValue(*vcfLfo, vcfLfoSync, vcfLfoRate, posInfo);
-            float modCutoff = juce::jmap(vcfModulation * vcfLfoAmount + (1.0f - vcfLfoAmount), 0.0f, 1.0f) * vcfCutoff;
+
+            // Map LFO from [-1,1] to [1/factor, factor] where factor depends on amount
+            float modulationFactor = std::pow(2.0f, vcfLfoAmount * 4.0f); // 4.0f gives us 4 octaves range at amount=1.0
+            float frequencyMultiplier = std::exp2(vcfModulation * std::log2(modulationFactor));
+
+            // Apply the modulation multiplicatively to preserve musical frequency ratios
+            float modCutoff = vcfCutoff * frequencyMultiplier;
+
+            // Ensure we stay within safe frequency bounds
+            modCutoff = juce::jlimit(20.0f, 20000.0f, modCutoff);
             vcf.setCutoffFrequency(modCutoff);
             vcf.setResonance(vcfResonance);
             channelData[sample] = vcf.processSample(static_cast<int>(channel), channelData[sample]);
@@ -636,8 +645,7 @@ void KinaVSTProcessor::initializeOversampling(int samplesPerBlock)
 {
     auto* oversamplingParam = dynamic_cast<juce::AudioParameterChoice*>(parameters.getParameter(OVERSAMPLING_ID));
     if (oversamplingParam != nullptr) {
-        // Reset to "Off" initially
-        oversamplingParam->setValueNotifyingHost(0.0f);
+        // Don't reset to "Off" - let the parameter keep its value
         oversampling.reset();
         
         try {
@@ -647,8 +655,8 @@ void KinaVSTProcessor::initializeOversampling(int samplesPerBlock)
                     getTotalNumOutputChannels(),
                     oversamplingParam->getIndex(),
                     juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
-                    true,
-                    false
+                    true,  // Use maximum quality
+                    true   // Use integer latency compensation
                 );
                 
                 if (oversampling) {
