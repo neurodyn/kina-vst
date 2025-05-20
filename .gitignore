@@ -1,3 +1,6 @@
+# Specific files
+VibingNotes.md
+
 # Build directories
 build/
 cmake-build-*/
