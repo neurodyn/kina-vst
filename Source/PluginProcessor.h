@@ -124,6 +124,11 @@ private:
     juce::Random random;
     juce::CriticalSection lock;
 
+    // Add smoothed parameters for echo
+    juce::SmoothedValue<float> smoothedEchoTime;
+    juce::SmoothedValue<float> smoothedEchoFeedback;
+    juce::SmoothedValue<float> smoothedEchoAmount;
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void processBlockInternal(juce::dsp::AudioBlock<float>& block, const juce::Optional<juce::AudioPlayHead::PositionInfo>& posInfo);
     void updateOversamplingSettings();

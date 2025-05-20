@@ -84,7 +84,7 @@ KinaVSTProcessor::KinaVSTProcessor()
         // Initialize Echo
         echo.reset();
         echo.prepare(spec);
-        echo.setMaximumDelayInSamples(static_cast<int>(currentSampleRate * 2.0));
+        echo.setMaximumDelayInSamples(static_cast<int>(currentSampleRate * 4.0)); // 4 seconds maximum delay
 
         // Initialize Reverb
         reverb.reset();
@@ -102,6 +102,11 @@ KinaVSTProcessor::KinaVSTProcessor()
         echo.reset();
         reverb.reset();
     }
+
+    // Add to class members
+    smoothedEchoTime.reset(currentSampleRate, 0.05);
+    smoothedEchoFeedback.reset(currentSampleRate, 0.05);
+    smoothedEchoAmount.reset(currentSampleRate, 0.05);
 }
 
 KinaVSTProcessor::~KinaVSTProcessor()
@@ -169,9 +174,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout KinaVSTProcessor::createPara
     
     // Echo parameters
     params.push_back(std::make_unique<juce::AudioParameterFloat>(ECHO_TIME_ID, "Echo Time", 
-        juce::NormalisableRange<float>(0.01f, 2.0f, 0.01f, 0.5f), 0.5f));
+        juce::NormalisableRange<float>(0.01f, 2.0f, 0.01f, 0.3f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(ECHO_FEEDBACK_ID, "Echo Feedback", 
-        juce::NormalisableRange<float>(0.0f, 0.99f, 0.01f), 0.5f));
+        juce::NormalisableRange<float>(0.0f, 0.95f, 0.01f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(ECHO_AMOUNT_ID, "Echo Amount", 
         juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f));
     params.push_back(std::make_unique<juce::AudioParameterBool>(ECHO_SYNC_ID, "Echo Sync", false));
@@ -247,7 +252,7 @@ void KinaVSTProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         // Prepare Echo
         echo.reset();
         echo.prepare(spec);
-        const auto maxDelaySamples = static_cast<int>(sampleRate * 2.0);
+        const auto maxDelaySamples = static_cast<int>(sampleRate * 4.0);
         if (maxDelaySamples > 0) {
             echo.setMaximumDelayInSamples(maxDelaySamples);
         }
@@ -258,6 +263,11 @@ void KinaVSTProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
         // Initialize oversampling last
         initializeOversampling(samplesPerBlock);
+
+        // Reset smoothed parameters
+        smoothedEchoTime.reset(currentSampleRate, 0.05);
+        smoothedEchoFeedback.reset(currentSampleRate, 0.05);
+        smoothedEchoAmount.reset(currentSampleRate, 0.05);
     }
     catch (const std::exception&) {
         // If preparation fails, reset everything to a safe state
@@ -431,21 +441,43 @@ void KinaVSTProcessor::processBlockInternal(juce::dsp::AudioBlock<float>& block,
             const float echoAmount = parameters.getRawParameterValue(ECHO_AMOUNT_ID)->load();
             const bool echoSync = static_cast<bool>(parameters.getRawParameterValue(ECHO_SYNC_ID)->load());
             
+            // Update smoothed values
+            smoothedEchoTime.setTargetValue(echoTime);
+            smoothedEchoFeedback.setTargetValue(echoFeedback);
+            smoothedEchoAmount.setTargetValue(echoAmount);
+            
             float delayInSamples;
             if (echoSync && posInfo && posInfo->getBpm().hasValue())
             {
                 const double samplesPerBeat = (60.0 / *posInfo->getBpm()) * currentSampleRate;
-                delayInSamples = static_cast<float>(samplesPerBeat * echoTime);
+                // Map time parameter to musical divisions (e.g., 1/4, 1/8, 1/16 notes)
+                const float beatDivisions[] = { 0.25f, 0.375f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f };
+                const float mappedTime = juce::jmap(smoothedEchoTime.getNextValue(), 0.01f, 2.0f, 
+                                                  beatDivisions[0], beatDivisions[std::size(beatDivisions)-1]);
+                delayInSamples = static_cast<float>(samplesPerBeat * mappedTime);
             }
             else
             {
-                delayInSamples = static_cast<float>(currentSampleRate * echoTime);
+                delayInSamples = static_cast<float>(currentSampleRate * smoothedEchoTime.getNextValue());
             }
             
+            // Ensure delay time is within bounds
+            delayInSamples = juce::jlimit(1.0f, static_cast<float>(echo.getMaximumDelayInSamples()), delayInSamples);
             echo.setDelay(delayInSamples);
-            const float echoed = echo.popSample(static_cast<int>(channel));
-            echo.pushSample(static_cast<int>(channel), channelData[sample]);
-            channelData[sample] = channelData[sample] * (1.0f - echoAmount) + echoed * echoAmount * echoFeedback;
+            
+            // Get the delayed sample
+            const float delayedSample = echo.popSample(static_cast<int>(channel));
+            
+            // Calculate the feedback input with smoothed feedback
+            const float feedbackInput = channelData[sample] + (delayedSample * smoothedEchoFeedback.getNextValue());
+            
+            // Push the feedback signal into the delay line
+            echo.pushSample(static_cast<int>(channel), feedbackInput);
+            
+            // Mix the original signal with the delayed signal (don't replace it)
+            const float dry = channelData[sample];
+            const float wet = delayedSample;
+            channelData[sample] = dry + (wet * smoothedEchoAmount.getNextValue());
         }
     }
     
