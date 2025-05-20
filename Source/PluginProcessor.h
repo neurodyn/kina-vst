@@ -136,6 +136,7 @@ private:
     float processDistortion(float sample, float amount, float tone, TrasherMode mode);
     float getLfoValue(juce::dsp::Oscillator<float>& lfo, bool sync, float rate, const juce::Optional<juce::AudioPlayHead::PositionInfo>& posInfo);
     void initializeOversampling(int samplesPerBlock);
+    void setupWaveShapers();
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KinaVSTProcessor)
 }; 

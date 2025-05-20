@@ -248,7 +248,8 @@ void KinaVSTProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         trasher2.reset();
         trasher1.prepare(spec);
         trasher2.prepare(spec);
-
+        setupWaveShapers();
+        
         // Prepare Echo
         echo.reset();
         echo.prepare(spec);
@@ -540,7 +541,8 @@ float KinaVSTProcessor::processDistortion(float sample, float amount, float tone
         return sample;
         
     float processed;
-    
+    /*
+
     switch (mode)
     {
         case TrasherMode::Fuzz:
@@ -550,6 +552,19 @@ float KinaVSTProcessor::processDistortion(float sample, float amount, float tone
         case TrasherMode::Scream:
             processed = (sample >= 0.0f) ? 1.0f - std::exp(-sample * amount * 3.0f)
                                        : -1.0f + std::exp(sample * amount * 3.0f);
+            break;
+    }
+    */
+    // Configure the waveshaping function based on the mode
+     // Use the already configured waveshapers
+    switch (mode)
+    {
+        case TrasherMode::Fuzz:
+            processed = trasher1.processSample(sample * (1.0f + 40.0f * amount));
+            break;
+            
+        case TrasherMode::Scream:
+            processed = trasher2.processSample(sample * amount * 3.0f);
             break;
     }
     
@@ -703,6 +718,19 @@ void KinaVSTProcessor::initializeOversampling(int samplesPerBlock)
     }
 }
 
+void KinaVSTProcessor::setupWaveShapers()
+{
+    // Set up Fuzz waveshaper
+    trasher1.functionToUse = [](float x) {
+        return std::tanh(x);
+    };
+    
+    // Set up Scream waveshaper
+    trasher2.functionToUse = [](float x) {
+        return (x >= 0.0f) ? 1.0f - std::exp(-x)
+                          : -1.0f + std::exp(x);
+    };
+}
 //==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
