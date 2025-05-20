@@ -1,0 +1,60 @@
+# Build directories
+build/
+cmake-build-*/
+
+# IDE files
+.idea/
+.vscode/
+*.code-workspace
+.vs/
+*.xcodeproj
+*.xcworkspace
+*.suo
+*.user
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Plugin files
+*.vst
+*.vst3
+*.component
+*.bundle
+*.aax
+
+# Backup files
+*~
+*.bak
+*.swp 
